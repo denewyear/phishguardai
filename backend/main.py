@@ -23,13 +23,16 @@ def sms_webhook(From: str = Form(...), Body: str = Form(...), MessageSid: str = 
     # Analyze the message
     analysis = analyze_message(Body)
     
-    # Format response
-    response_text = format_sms_response(analysis)
+    # Generate TwiML response directly
+    from twilio.twiml.messaging_response import MessagingResponse
     
-    # Return TwiML XML
-    twiml = handle_incoming_sms(response_text)
+    response = MessagingResponse()
     
-    return Response(content=twiml, media_type="application/xml")
+    # Format the SMS message
+    sms_text = format_sms_response(analysis)
+    response.message(sms_text)
+    
+    return Response(content=str(response), media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
