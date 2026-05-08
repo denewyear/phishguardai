@@ -1,6 +1,6 @@
 """
-PhishGuard AI - Database Module
-Handles both Web (authenticated users) and SMS (anonymous) channels
+PhishGuard Web - Database Module
+Web-based phishing detection platform with authenticated users
 """
 
 import os
@@ -35,11 +35,11 @@ def get_conn():
 
 
 def init_db():
-    """Initialize database schema for both web and SMS channels"""
+    """Initialize database schema for web application"""
     with get_conn() as conn:
         cur = conn.cursor()
         
-        # Web users table (authenticated)
+        # Users table (authenticated web users)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id            SERIAL PRIMARY KEY,
@@ -49,38 +49,16 @@ def init_db():
             );
         """)
         
-        # SMS phone numbers table (anonymous)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS phone_numbers (
-                id               SERIAL PRIMARY KEY,
-                phone_number     VARCHAR(20) UNIQUE NOT NULL,
-                first_seen       TIMESTAMP DEFAULT NOW(),
-                last_activity    TIMESTAMP DEFAULT NOW(),
-                total_messages   INTEGER DEFAULT 0,
-                high_risk_count  INTEGER DEFAULT 0,
-                medium_risk_count INTEGER DEFAULT 0,
-                low_risk_count   INTEGER DEFAULT 0
-            );
-        """)
-        
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_phone_number 
-            ON phone_numbers(phone_number);
-        """)
-        
-        # Messages table (handles both web and SMS)
+        # Messages table (all phishing analyses)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id             SERIAL PRIMARY KEY,
-                user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
-                phone_id       INTEGER REFERENCES phone_numbers(id) ON DELETE SET NULL,
+                user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 message_text   TEXT NOT NULL,
                 risk_score     INTEGER NOT NULL,
                 classification VARCHAR(20) NOT NULL,
                 patterns       TEXT[],
                 recommendation TEXT,
-                channel        VARCHAR(10) DEFAULT 'web',
-                message_sid    VARCHAR(34),
                 analyzed_at    TIMESTAMP DEFAULT NOW()
             );
         """)
@@ -91,16 +69,29 @@ def init_db():
         """)
         
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_messages_phone
-            ON messages(phone_id, analyzed_at DESC);
-        """)
-        
-        cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_classification
             ON messages(classification);
         """)
+        
+        # Shared phishing examples table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS shared_phishes (
+                id                SERIAL PRIMARY KEY,
+                message_id        INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+                shared_by_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                title             VARCHAR(255),
+                description       TEXT,
+                is_public         BOOLEAN DEFAULT TRUE,
+                shared_at         TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_shared_public
+            ON shared_phishes(is_public, shared_at DESC);
+        """)
 
-# WEB USERS (Authenticated)
+# USER MANAGEMENT
 
 def create_user(email: str, password_hash: str) -> dict:
     """Create a new web user account"""
@@ -130,138 +121,33 @@ def get_user_by_id(user_id: int) -> dict | None:
         row = cur.fetchone()
         return dict(row) if row else None
 
-# SMS PHONE NUMBERS (Anonymous)
+# MESSAGE ANALYSIS
 
-def get_or_create_phone_number(phone: str) -> int:
+def save_message(user_id: int, text: str, result: dict) -> dict:
     """
-    Get existing phone_id or create new phone_number record.
-    Returns: phone_id (int)
-    """
-    with get_conn() as conn:
-        cur = conn.cursor()
-        
-        # Check if exists
-        cur.execute(
-            "SELECT id FROM phone_numbers WHERE phone_number = %s",
-            (phone,)
-        )
-        result = cur.fetchone()
-        
-        if result:
-            return result[0]
-        
-        # Create new
-        cur.execute(
-            """INSERT INTO phone_numbers (phone_number) 
-               VALUES (%s) RETURNING id""",
-            (phone,)
-        )
-        return cur.fetchone()[0]
-
-
-def get_phone_stats(phone: str) -> dict | None:
-    """
-    Get analytics for a phone number.
-    Returns: {total_analyzed, high_risk_count, medium_risk_count, low_risk_count, avg_risk_score}
-    """
-    with get_conn() as conn:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(
-            """SELECT 
-                total_messages, 
-                high_risk_count, 
-                medium_risk_count, 
-                low_risk_count,
-                first_seen, 
-                last_activity,
-                COALESCE(
-                    (SELECT ROUND(AVG(risk_score)::numeric, 1) 
-                     FROM messages m 
-                     WHERE m.phone_id = p.id), 
-                    0
-                ) as avg_risk_score
-               FROM phone_numbers p
-               WHERE phone_number = %s""",
-            (phone,)
-        )
-        row = cur.fetchone()
-        return dict(row) if row else None
-
-
-def update_phone_stats(phone_id: int, classification: str) -> None:
-    """Update phone number statistics after analyzing a message"""
-    with get_conn() as conn:
-        cur = conn.cursor()
-        
-        # Determine which counter to increment
-        count_field = classification.lower().replace(' ', '_') + '_count'
-        
-        cur.execute(
-            f"""UPDATE phone_numbers 
-                SET total_messages = total_messages + 1,
-                    {count_field} = {count_field} + 1,
-                    last_activity = NOW()
-                WHERE id = %s""",
-            (phone_id,)
-        )
-
-# MESSAGES (Both Web and SMS)
-
-def save_message(
-    user_id: int | None, 
-    text: str, 
-    result: dict, 
-    channel: str = "web",
-    message_sid: str | None = None,
-    phone_id: int | None = None
-) -> dict:
-    """
-    Save message analysis for either web or SMS channel.
+    Save message analysis for a web user.
     
     Args:
-        user_id: Web user ID (None for SMS)
+        user_id: Web user ID
         text: Message content
-        result: Analysis result from detect.py
-        channel: 'web' or 'sms'
-        message_sid: Twilio message ID (for SMS only)
-        phone_id: Phone number ID (for SMS only)
+        result: Analysis result from detect.py containing:
+                {risk_score, classification, patterns_detected, recommendation}
+    
+    Returns:
+        {id, analyzed_at}
     """
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """INSERT INTO messages
-               (user_id, phone_id, message_text, risk_score, classification, 
-                patterns, recommendation, channel, message_sid)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               (user_id, message_text, risk_score, classification, patterns, recommendation)
+               VALUES (%s, %s, %s, %s, %s, %s)
                RETURNING id, analyzed_at""",
-            (user_id, phone_id, text, result["risk_score"], result["classification"],
-             result["patterns_detected"], result["recommendation"], channel, message_sid),
+            (user_id, text, result["risk_score"], result["classification"],
+             result["patterns_detected"], result["recommendation"]),
         )
         row = cur.fetchone()
         return {"id": row["id"], "analyzed_at": row["analyzed_at"]}
-
-
-def save_sms_message(phone: str, message_sid: str, body: str, analysis: dict) -> dict:
-    """
-    Save SMS message and update phone statistics.
-    Convenience function for SMS channel.
-    """
-    phone_id = get_or_create_phone_number(phone)
-    
-    # Save message
-    result = save_message(
-        user_id=None,
-        text=body,
-        result=analysis,
-        channel='sms',
-        message_sid=message_sid,
-        phone_id=phone_id
-    )
-    
-    # Update phone stats
-    update_phone_stats(phone_id, analysis['classification'])
-    
-    return result
 
 
 def get_user_history(user_id: int, limit: int = 20, offset: int = 0) -> list:
@@ -270,7 +156,7 @@ def get_user_history(user_id: int, limit: int = 20, offset: int = 0) -> list:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """SELECT id, message_text, risk_score, classification,
-                      patterns, recommendation, channel, analyzed_at
+                      patterns, recommendation, analyzed_at
                FROM messages WHERE user_id = %s
                ORDER BY analyzed_at DESC LIMIT %s OFFSET %s""",
             (user_id, limit, offset),
@@ -278,24 +164,8 @@ def get_user_history(user_id: int, limit: int = 20, offset: int = 0) -> list:
         return [dict(r) for r in cur.fetchall()]
 
 
-def get_phone_history(phone: str, limit: int = 20) -> list:
-    """Get message history for a phone number"""
-    with get_conn() as conn:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(
-            """SELECT m.id, m.message_text, m.risk_score, m.classification,
-                      m.patterns, m.recommendation, m.analyzed_at
-               FROM messages m
-               JOIN phone_numbers p ON m.phone_id = p.id
-               WHERE p.phone_number = %s
-               ORDER BY m.analyzed_at DESC LIMIT %s""",
-            (phone, limit),
-        )
-        return [dict(r) for r in cur.fetchall()]
-
-
 def delete_message(message_id: int, user_id: int) -> bool:
-    """Delete a message (web users only)"""
+    """Delete a message"""
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -306,7 +176,12 @@ def delete_message(message_id: int, user_id: int) -> bool:
 
 
 def get_user_stats(user_id: int) -> dict:
-    """Get statistics for a web user"""
+    """
+    Get statistics for a web user.
+    
+    Returns:
+        {total, high, medium, low, avg_score}
+    """
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
@@ -322,90 +197,119 @@ def get_user_stats(user_id: int) -> dict:
         row = cur.fetchone()
         return dict(row)
 
-# RATE LIMITING
+# TRENDING & ANALYTICS
 
-def check_sms_rate_limit(phone: str, hourly_limit: int = 10, daily_limit: int = 100) -> dict:
+def get_trending_patterns(limit: int = 10, days: int = 7) -> list:
     """
-    Check if phone number has exceeded SMS rate limits.
-    Returns: {allowed: bool, reason: str, hourly_count: int, daily_count: int}
+    Get most common phishing patterns from recent analyses.
+    
+    Args:
+        limit: Number of top patterns to return
+        days: Look back period in days
+    
+    Returns:
+        List of {pattern, count, percentage}
     """
     with get_conn() as conn:
-        cur = conn.cursor()
-        
-        # Get phone_id
-        phone_id = get_or_create_phone_number(phone)
-        
-        # Check hourly limit
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            """SELECT COUNT(*) FROM messages
-               WHERE phone_id = %s
-               AND channel = 'sms'
-               AND analyzed_at > NOW() - INTERVAL '1 hour'""",
-            (phone_id,)
+            """SELECT 
+                UNNEST(patterns) as pattern,
+                COUNT(*) as count,
+                ROUND((COUNT(*)::numeric / 
+                    (SELECT COUNT(*) FROM messages 
+                     WHERE analyzed_at > NOW() - INTERVAL '%s days' 
+                     AND classification = 'HIGH RISK')) * 100, 1) as percentage
+               FROM messages
+               WHERE analyzed_at > NOW() - INTERVAL '%s days'
+               AND classification = 'HIGH RISK'
+               GROUP BY pattern
+               ORDER BY count DESC
+               LIMIT %s""",
+            (days, days, limit),
         )
-        hourly_count = cur.fetchone()[0]
-        
-        # Check daily limit
-        cur.execute(
-            """SELECT COUNT(*) FROM messages
-               WHERE phone_id = %s
-               AND channel = 'sms'
-               AND analyzed_at > NOW() - INTERVAL '1 day'""",
-            (phone_id,)
-        )
-        daily_count = cur.fetchone()[0]
-        
-        # Determine if allowed
-        if hourly_count >= hourly_limit:
-            return {
-                'allowed': False,
-                'reason': f'Hourly limit exceeded ({hourly_count}/{hourly_limit})',
-                'hourly_count': hourly_count,
-                'daily_count': daily_count
-            }
-        
-        if daily_count >= daily_limit:
-            return {
-                'allowed': False,
-                'reason': f'Daily limit exceeded ({daily_count}/{daily_limit})',
-                'hourly_count': hourly_count,
-                'daily_count': daily_count
-            }
-        
-        return {
-            'allowed': True,
-            'reason': 'OK',
-            'hourly_count': hourly_count,
-            'daily_count': daily_count
-        }
+        return [dict(r) for r in cur.fetchall()]
 
 
-def sms_rate_check(phone: str, limit: int = 10, hours: int = 1) -> tuple[bool, int]:
+def get_risk_distribution() -> dict:
     """
-    Legacy function for basic rate checking (kept for compatibility).
-    Returns: (exceeded: bool, count: int)
+    Get distribution of risk levels across all analyses.
+    
+    Returns:
+        {high_count, medium_count, low_count, total}
     """
     with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN classification='HIGH RISK'   THEN 1 ELSE 0 END) AS high_count,
+                SUM(CASE WHEN classification='MEDIUM RISK' THEN 1 ELSE 0 END) AS medium_count,
+                SUM(CASE WHEN classification='LOW RISK'    THEN 1 ELSE 0 END) AS low_count
+               FROM messages"""
+        )
+        return dict(cur.fetchone())
+
+# SHARING FEATURE
+
+def share_phish(message_id: int, user_id: int, title: str = None, 
+                description: str = None, is_public: bool = True) -> dict:
+    """
+    Share a phishing message to the public gallery.
+    
+    Args:
+        message_id: ID of message to share
+        user_id: User sharing the message
+        title: Optional title for the shared phish
+        description: Optional description/context
+        is_public: Whether to make it publicly visible
+    
+    Returns:
+        {id, shared_at}
+    """
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """INSERT INTO shared_phishes
+               (message_id, shared_by_user_id, title, description, is_public)
+               VALUES (%s, %s, %s, %s, %s)
+               RETURNING id, shared_at""",
+            (message_id, user_id, title, description, is_public),
+        )
+        return dict(cur.fetchone())
+
+
+def get_shared_phishes(limit: int = 20, offset: int = 0) -> list:
+    """
+    Get public shared phishing examples.
+    
+    Returns:
+        List of shared phishes with message details
+    """
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """SELECT 
+                sp.id, sp.title, sp.description, sp.shared_at,
+                m.message_text, m.risk_score, m.classification, m.patterns,
+                u.email as shared_by
+               FROM shared_phishes sp
+               JOIN messages m ON sp.message_id = m.id
+               JOIN users u ON sp.shared_by_user_id = u.id
+               WHERE sp.is_public = TRUE
+               ORDER BY sp.shared_at DESC
+               LIMIT %s OFFSET %s""",
+            (limit, offset),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def unshare_phish(shared_id: int, user_id: int) -> bool:
+    """Remove a shared phish (only by the user who shared it)"""
+    with get_conn() as conn:
         cur = conn.cursor()
-        
-        # Get phone_id
         cur.execute(
-            "SELECT id FROM phone_numbers WHERE phone_number = %s",
-            (phone,)
+            "DELETE FROM shared_phishes WHERE id = %s AND shared_by_user_id = %s",
+            (shared_id, user_id),
         )
-        result = cur.fetchone()
-        
-        if not result:
-            return False, 0
-        
-        phone_id = result[0]
-        
-        cur.execute(
-            """SELECT COUNT(*) FROM messages
-               WHERE phone_id = %s
-               AND channel = 'sms'
-               AND analyzed_at > NOW() - INTERVAL '%s hours'""",
-            (phone_id, hours),
-        )
-        count = cur.fetchone()[0]
-        return count >= limit, count
+        return cur.rowcount > 0

@@ -13,7 +13,6 @@ from slowapi.errors import RateLimitExceeded
 from database import init_db
 from routers.auth_router import router as auth_router
 from routers.analyze_router import router as analyze_router, limiter
-from routers.sms_router import router as sms_router
 
 app = FastAPI(title="PhishGuard AI", version="1.0.0")
 
@@ -34,7 +33,7 @@ app.add_middleware(
 # Routers
 app.include_router(auth_router)
 app.include_router(analyze_router)
-app.include_router(sms_router)
+
 
 
 @app.get("/health")
@@ -53,9 +52,9 @@ if os.path.isdir(FRONTEND_BUILD):
         return FileResponse(index)
 
 
-##@app.on_event("startup")
-##def startup():
-##    init_db()
+@app.on_event("startup")
+def startup():
+    init_db()
 
 
 if __name__ == "__main__":

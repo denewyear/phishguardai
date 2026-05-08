@@ -1,250 +1,301 @@
-# PhishGuard AI
+# PhishGuard Web
 
-Real-time phishing and smishing detection platform.
-- **Web dashboard** — paste suspicious messages, get instant risk scores
-- **Twilio SMS** — forward suspicious texts to our number, get analysis via SMS reply
-- **JWT auth** — per-user history, private and account-scoped
-- **FastAPI + React + PostgreSQL** — deployed on AWS EC2 + RDS
+A real-time phishing detection platform with community-driven threat intelligence.
 
----
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue.svg)
+![React](https://img.shields.io/badge/react-18-blue.svg)
 
-## Project Structure
-
-```
-phishguard/
-├── backend/
-│   ├── main.py              # FastAPI app entry point
-│   ├── detect.py            # Phishing pattern detection engine
-│   ├── database.py          # All PostgreSQL operations (psycopg2)
-│   ├── auth.py              # JWT token + bcrypt password handling
-│   ├── requirements.txt
-│   ├── .env.example         # Copy to .env and fill in values
-│   └── routers/
-│       ├── auth_router.py   # POST /auth/register, POST /auth/login
-│       ├── analyze_router.py# POST /analyze, GET /history, GET /stats
-│       └── sms_router.py    # POST /sms (Twilio webhook)
-├── frontend/
-│   ├── src/
-│   │   ├── App.js           # Routing + auth context
-│   │   ├── api/client.js    # Fetch wrapper for all API calls
-│   │   └── pages/
-│   │       ├── LoginPage.js
-│   │       ├── RegisterPage.js
-│   │       ├── AnalyzePage.js  # Main dashboard
-│   │       └── HistoryPage.js  # Full history + delete
-│   └── package.json
-├── Dockerfile
-├── docker-compose.yml       # Local development with Postgres
-└── .github/workflows/
-    └── deploy.yml           # CI/CD: build + deploy to EC2
-```
+**Live Demo:** [phishguard.example.com](https://your-url-here.com)
 
 ---
 
-## Local Development
+## Features
+
+- 🔍 **Instant Phishing Detection** — Analyze suspicious messages in real-time using pattern-based detection
+- 📊 **Trending Threats** — See what phishing tactics are most prevalent right now
+- 🤝 **Community Sharing** — Contribute and learn from a public gallery of phishing examples
+- 📈 **Personal Dashboard** — Track your analysis history and security insights
+- ☁️ **Cloud Native** — Built on AWS infrastructure (EC2, RDS, S3)
+
+---
+
+## How It Works
+
+PhishGuard analyzes messages across 6+ pattern categories:
+
+1. **Suspicious URLs** - Shortened links, misleading domains, IP-based URLs
+2. **Urgency Language** - Pressure tactics like "URGENT", "ACT NOW"
+3. **Sensitive Information Requests** - Asks for passwords, SSN, credit cards
+4. **Generic Greetings** - Impersonal "Dear Customer" openings
+5. **Financial Threats** - Account suspension, payment verification claims
+6. **Authority Impersonation** - Fake government, bank, or tech support
+
+**Risk Scoring:**
+- **0-30:** LOW RISK ✅ — Appears safe
+- **31-60:** MEDIUM RISK ⚠️ — Exercise caution
+- **61-100:** HIGH RISK 🚨 — Likely phishing attempt
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- Docker + Docker Compose
-- Node.js 20+
+
 - Python 3.11+
+- Node.js 20+
+- PostgreSQL 14+
 
-### 1. Clone and configure
+### Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/phishguard.git
+# Clone repository
+git clone https://github.com/yourusername/phishguard.git
 cd phishguard
-cp backend/.env.example backend/.env
-# Edit backend/.env with your values
-```
 
-### 2. Start everything with Docker Compose
-
-```bash
-docker-compose up --build
-```
-
-- Backend: http://localhost:8000
-- Frontend: http://localhost:3000
-- API docs: http://localhost:8000/docs
-
-### 3. Run backend only (faster for development)
-
-```bash
+# Backend setup
 cd backend
-python -m venv venv && source venv/bin/activate
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-# Make sure Postgres is running (docker-compose up db)
+cp .env.example .env
+# Edit .env with your database credentials
 python main.py
-```
 
-### 4. Run frontend only
-
-```bash
+# Frontend setup (in new terminal)
 cd frontend
 npm install
 npm start
 ```
 
----
-
-## Environment Variables
-
-Copy `backend/.env.example` to `backend/.env`:
-
-```env
-DB_HOST=localhost           # RDS endpoint in production
-DB_NAME=phishguard
-DB_USER=postgres
-DB_PASS=password
-DB_PORT=5432
-
-JWT_SECRET=your-long-random-secret
-
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your-twilio-token
-TWILIO_PHONE_NUMBER=+15551234567
-
-ALLOWED_ORIGINS=http://localhost:3000
-```
-
----
-
-## AWS Deployment (EC2 + RDS)
-
-### 1. Create RDS PostgreSQL
-
-```
-AWS Console → RDS → Create database
-Engine: PostgreSQL 15
-Instance: db.t3.micro (free tier)
-DB name: phishguard
-Security group: allow port 5432 from EC2 security group only
-```
-
-### 2. Launch EC2
-
-```
-AMI: Amazon Linux 2
-Instance type: t2.micro (free tier)
-Security group: open port 80 inbound
-Assign Elastic IP
-```
-
-### 3. SSH and install Docker
-
-```bash
-ssh -i your-key.pem ec2-user@YOUR_EC2_IP
-sudo yum install -y docker git
-sudo service docker start
-sudo usermod -aG docker ec2-user
-# Log out and back in
-```
-
-### 4. Clone repo and set up .env
-
-```bash
-git clone https://github.com/YOUR_USERNAME/phishguard.git
-cd phishguard
-nano backend/.env   # fill in RDS credentials + JWT secret + Twilio
-```
-
-### 5. Build and run
-
-```bash
-cd frontend && npm ci && REACT_APP_API_URL="" npm run build && cd ..
-docker build -t phishguard .
-docker run -d --name phishguard --restart unless-stopped \
-  -p 80:8000 --env-file backend/.env phishguard
-```
-
-### 6. Configure Twilio webhook
-
-In Twilio Console → Phone Numbers → your number → Messaging:
-```
-Webhook URL: http://YOUR_EC2_IP/sms
-HTTP Method: POST
-```
-
-### 7. Set GitHub Secrets for CI/CD
-
-In your GitHub repo → Settings → Secrets:
-```
-EC2_HOST     = your EC2 public IP
-EC2_USER     = ec2-user
-EC2_SSH_KEY  = (contents of your .pem file)
-```
+Backend: `http://localhost:8000`  
+Frontend: `http://localhost:3000`  
+API Docs: `http://localhost:8000/docs`
 
 ---
 
 ## API Reference
 
-### Auth
+### Authentication
 
-| Method | Endpoint | Body | Response |
-|--------|----------|------|----------|
-| POST | `/auth/register` | `{"email":"...","password":"..."}` | `{"token":"...","email":"..."}` |
-| POST | `/auth/login` | `{"email":"...","password":"..."}` | `{"token":"...","email":"..."}` |
+```bash
+# Register
+POST /auth/register
+Content-Type: application/json
 
-### Analyze (requires `Authorization: Bearer <token>`)
+{
+  "email": "user@example.com",
+  "password": "secure_password"
+}
 
-| Method | Endpoint | Body / Params | Response |
-|--------|----------|---------------|----------|
-| POST | `/analyze` | `{"message":"..."}` | `{"risk_score":85,"classification":"HIGH RISK","patterns_detected":[...],"recommendation":"..."}` |
-| GET | `/history` | `?limit=20&offset=0` | `{"items":[...]}` |
-| DELETE | `/history/{id}` | — | `{"deleted":true}` |
-| GET | `/stats` | — | `{"total":10,"high":5,"medium":3,"low":2}` |
+# Login
+POST /auth/login
+Content-Type: application/json
 
-### SMS (Twilio webhook)
+{
+  "email": "user@example.com",
+  "password": "secure_password"
+}
+```
 
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| POST | `/sms` | Twilio signature header |
+### Analysis (Requires JWT Token)
 
-### Health
+```bash
+# Analyze message
+POST /api/analyze
+Authorization: Bearer <token>
+Content-Type: application/json
 
-| Method | Endpoint |
-|--------|----------|
-| GET | `/health` |
+{
+  "message": "URGENT: Your account will be suspended! Click here: bit.ly/verify"
+}
 
----
+# Response
+{
+  "risk_score": 85,
+  "classification": "HIGH RISK",
+  "patterns_detected": [
+    "Suspicious URL",
+    "Urgency language",
+    "Requests sensitive info"
+  ],
+  "recommendation": "⚠️ DO NOT click links or provide information"
+}
+```
 
-## Rate Limits
+### Community Features
 
-| Endpoint | Limit | Key |
-|----------|-------|-----|
-| POST /analyze | 10 / minute | Client IP |
-| POST /auth/login | 5 / minute | Client IP |
-| POST /sms | 10 / hour | Sender phone (DB query) |
-| GET /history | 30 / minute | Client IP |
+```bash
+# Get trending patterns
+GET /api/trending?days=7&limit=10
+
+# Share phishing example
+POST /api/share
+Authorization: Bearer <token>
+
+{
+  "message_id": 123,
+  "title": "Bank Account Scam",
+  "description": "Classic phishing attempt impersonating Chase Bank"
+}
+
+# Browse shared examples
+GET /api/shared?limit=20&offset=0
+```
+
+Full API documentation: `/docs` (FastAPI automatic docs)
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
+| Component | Technology |
+|-----------|-----------|
 | Backend | FastAPI (Python 3.11) |
 | Frontend | React 18 |
-| Database | PostgreSQL 15 on AWS RDS |
-| Auth | JWT (python-jose) + bcrypt (passlib) |
-| Rate limiting | slowapi |
-| SMS | Twilio |
-| Containerisation | Docker |
-| CI/CD | GitHub Actions |
-| Hosting | AWS EC2 (t2.micro) |
+| Database | PostgreSQL 14 |
+| Authentication | JWT + bcrypt |
+| Rate Limiting | slowapi |
+| Cloud Storage | AWS S3 |
+| Hosting | AWS EC2 + RDS |
 
 ---
 
-## Both Partners — Git Workflow
+## Deployment
+
+### AWS Infrastructure
 
 ```bash
-# Never commit directly to main
-git checkout -b feature/your-feature
-# make changes
-git add .
-git commit -m "descriptive message"
-git push origin feature/your-feature
-# open pull request → merge to main → CI/CD auto-deploys
+# 1. Create RDS PostgreSQL database
+aws rds create-db-instance \
+  --db-instance-identifier phishguard-db \
+  --db-instance-class db.t3.micro \
+  --engine postgres \
+  --master-username postgres \
+  --master-user-password your-password \
+  --allocated-storage 20
+
+# 2. Launch EC2 instance
+aws ec2 run-instances \
+  --image-id ami-0c55b159cbfafe1f0 \
+  --instance-type t2.micro \
+  --key-name your-key-pair \
+  --security-groups phishguard-sg
+
+# 3. Deploy backend
+ssh -i your-key.pem ubuntu@your-ec2-ip
+git clone https://github.com/yourusername/phishguard.git
+cd phishguard/backend
+pip install -r requirements.txt
+python main.py
+
+# 4. Build and deploy frontend
+cd ../frontend
+npm run build
+# Upload to S3 or serve with nginx
 ```
 
-Both partners must have meaningful commits. The grader checks `git log`.
+---
+
+## Configuration
+
+Create `backend/.env`:
+
+```env
+DB_HOST=your-rds-endpoint.amazonaws.com
+DB_NAME=phishguard
+DB_USER=postgres
+DB_PASS=your-password
+DB_PORT=5432
+
+SECRET_KEY=your-jwt-secret-key
+
+ALLOWED_ORIGINS=https://your-frontend-url.com
+```
+
+---
+
+## Database Schema
+
+```sql
+-- Users table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(120) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Messages table
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    message_text TEXT NOT NULL,
+    risk_score INTEGER NOT NULL,
+    classification VARCHAR(20) NOT NULL,
+    patterns TEXT[],
+    recommendation TEXT,
+    analyzed_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Shared phishes table
+CREATE TABLE shared_phishes (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+    shared_by_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255),
+    description TEXT,
+    is_public BOOLEAN DEFAULT TRUE,
+    shared_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## Security
+
+- All passwords are hashed using bcrypt
+- JWT tokens expire after 7 days
+- Rate limiting prevents abuse
+- SQL injection protection via parameterized queries
+- CORS configured for trusted origins only
+
+**Found a security issue?** Please email security@example.com instead of opening a public issue.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Acknowledgments
+
+- Detection patterns inspired by APWG phishing trends reports
+- Built with FastAPI and React
+- Deployed on AWS infrastructure
+
+---
+
+## Contact
+
+- **Website:** [phishguard.example.com](https://your-url-here.com)
+- **Issues:** [GitHub Issues](https://github.com/yourusername/phishguard/issues)
+- **Email:** contact@example.com
+
+---
+
+**⚠️ Disclaimer:** PhishGuard is an educational tool and should not be relied upon as the sole method of phishing detection. Always exercise caution with suspicious messages.
