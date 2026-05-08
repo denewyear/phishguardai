@@ -53,9 +53,9 @@ if os.path.isdir(FRONTEND_BUILD):
         return FileResponse(index)
 
 
-@app.on_event("startup")
-def startup():
-    init_db()
+##@app.on_event("startup")
+##def startup():
+##    init_db()
 
 
 if __name__ == "__main__":

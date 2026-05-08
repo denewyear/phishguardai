@@ -18,7 +18,8 @@ async def sms_webhook(
     MessageSid: str = Form(default=""),
 ):
     # Rate limit by phone number
-    over_limit, count = sms_rate_check(From, limit=10, hours=1)
+    ##over_limit, count = sms_rate_check(From, limit=10, hours=1)
+    over_limit, count = False, 0  # Disabled for demo without database
     resp = MessagingResponse()
 
     if over_limit:
@@ -37,7 +38,7 @@ async def sms_webhook(
 
     # Analyze
     result = analyze_message(Body)
-    save_message(user_id=None, text=Body, result=result, channel="sms")
+    ##save_message(user_id=None, text=Body, result=result, channel="sms")
 
     emoji = {"HIGH RISK": "URGENT", "MEDIUM RISK": "WARNING", "LOW RISK": "SAFE"}
     tag = emoji.get(result["classification"], "INFO")
