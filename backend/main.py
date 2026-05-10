@@ -54,7 +54,8 @@ if os.path.isdir(FRONTEND_BUILD):
 
 @app.on_event("startup")
 def startup():
-    init_db()
+    pass #database already initialized from EC2
+    # init_db() # Uncomment when deploying to EC2
 
 
 if __name__ == "__main__":
