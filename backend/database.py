@@ -313,3 +313,53 @@ def unshare_phish(shared_id: int, user_id: int) -> bool:
             (shared_id, user_id),
         )
         return cur.rowcount > 0
+
+def get_trending_patterns(limit=10, days=7):
+    """Get most common phishing patterns from recent messages"""
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    UNNEST(patterns) as pattern,
+                    COUNT(*) as count,
+                    AVG(risk_score) as avg_risk
+                FROM messages
+                WHERE analyzed_at > NOW() - INTERVAL '%s days'
+                GROUP BY pattern
+                ORDER BY count DESC
+                LIMIT %s
+            """, (days, limit))
+            return cur.fetchall()
+
+def share_phish(message_id, user_id, title=None, description=None, is_public=True):
+    """Share a phishing message to public gallery"""
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO shared_phishes (message_id, shared_by_user_id, title, description, is_public)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, shared_at
+            """, (message_id, user_id, title, description, is_public))
+            return cur.fetchone()
+
+def get_shared_phishes(limit=20, offset=0):
+    """Get public shared phishing examples"""
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    sp.id,
+                    sp.title,
+                    sp.description,
+                    sp.shared_at,
+                    m.message_text,
+                    m.risk_score,
+                    m.classification,
+                    m.patterns
+                FROM shared_phishes sp
+                JOIN messages m ON sp.message_id = m.id
+                WHERE sp.is_public = TRUE
+                ORDER BY sp.shared_at DESC
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
+            return cur.fetchall()
