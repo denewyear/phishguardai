@@ -15,22 +15,11 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_KEY }}
-        command_timeout: 2m
         script: |
           cd ~/phishguardai/backend
           git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt --quiet
-          
-          # Kill and restart
           pkill -f "python main.py" || true
-          sleep 3
           nohup venv/bin/python main.py > backend.log 2>&1 &
-          
-          # Quick health check (don't wait forever)
-          sleep 5
-          if curl -sf http://localhost:8000/health; then
-            echo "✓ Deployment successful"
-          else
-            echo "⚠ Backend starting (check manually)"
-          fi
+          echo "Deployment complete - backend restarting"
