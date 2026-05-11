@@ -220,17 +220,17 @@ export default function AnalyzePage() {
           <div style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.white, marginBottom: 12 }}>Your stats</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <StatPill label="Analyzed" value={recent.length} />
-              <StatPill label="High risk" value={recent.filter(r => r.classification === "HIGH RISK").length} color={T.red} />
+              <StatPill label="Analyzed" value={Array.isArray(recent) ? recent.length : 0} />
+              <StatPill label="High risk" value={Array.isArray(recent) ? recent.filter(r => r.classification === "HIGH RISK").length : 0} color={T.red} />
             </div>
           </div>
 
           {/* Recent analyses */}
           <div style={{ background: T.panel, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.white, marginBottom: 12 }}>Recent analyses</div>
-            {recent.length === 0 ? (
-              <div style={{ fontSize: 12, color: T.slate }}>No analyses yet.</div>
-            ) : recent.map(r => {
+            {(!recent || recent.length === 0) ? (
+  		<div style={{ fontSize: 12, color: T.slate }}>No analyses yet.</div>
+) : Array.isArray(recent) && recent.map(r => {
               const rc = { "HIGH RISK": T.red, "MEDIUM RISK": T.amber, "LOW RISK": T.lime }[r.classification] || "#888";
               return (
                 <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>

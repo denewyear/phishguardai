@@ -1,9 +1,7 @@
 // Toggle between mock and real API
-const USE_MOCK = true;  // Set to false when backend is deployed!
+const USE_MOCK = false;  // Set to false when backend is deployed!
 
-const API_BASE = USE_MOCK 
-  ? null 
-  : 'http://localhost:8000';  // Change to EC2 URL for production
+const API_BASE = 'http://3.17.25.164:8000'; 
 
 // Mock responses matching API contract
 const mockData = {
@@ -83,6 +81,7 @@ const mockData = {
 
 // Simulate network delay
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const WARNING_IMAGES = {
   "HIGH RISK":   "https://placehold.co/600x100/FF4757/ffffff?text=HIGH+RISK+%E2%80%94+Do+not+click+any+links",
   "MEDIUM RISK": "https://placehold.co/600x100/FFA502/ffffff?text=MEDIUM+RISK+%E2%80%94+Proceed+with+caution",
@@ -92,8 +91,43 @@ export const WARNING_IMAGES = {
 export function getWarningImage(classification) {
   return WARNING_IMAGES[classification] || WARNING_IMAGES["LOW RISK"];
 }
+
 // API functions
 export const api = {
+  register: async (email, password) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { message: "User created", user_id: 1 };
+    }
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Registration failed');
+    }
+    return res.json();
+  },
+
+  login: async (email, password) => {
+    if (USE_MOCK) {
+      await delay(500);
+      return { access_token: "mock_token_12345", token_type: "bearer" };
+    }
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Login failed');
+    }
+    return res.json();
+  },
+
   analyze: async (message) => {
     if (USE_MOCK) {
       await delay(500);
@@ -112,18 +146,22 @@ export const api = {
     return res.json();
   },
   
-  getHistory: async (limit = 20, offset = 0) => {
-    if (USE_MOCK) {
-      await delay(300);
-      return mockData.history;
-    }
-    const token = localStorage.getItem('token');
-    const res = await fetch(
-      `${API_BASE}/api/history?limit=${limit}&offset=${offset}`,
-      { headers: { 'Authorization': `Bearer ${token}` }}
-    );
-    return res.json();
-  },
+getHistory: async (limit = 20, offset = 0) => {
+  if (USE_MOCK) {
+    await delay(300);
+    return mockData.history;
+  }
+  const token = localStorage.getItem('token');
+  const res = await fetch(
+    `${API_BASE}/api/history?limit=${limit}&offset=${offset}`,
+    { headers: { 'Authorization': `Bearer ${token}` }}
+  );
+  if (!res.ok) {
+    // Return empty array on error instead of throwing
+    return [];
+  }
+  return res.json();
+},
   
   getTrending: async (days = 7, limit = 10) => {
     if (USE_MOCK) {
