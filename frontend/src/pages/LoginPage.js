@@ -15,7 +15,7 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(""); setLoading(true);
-    try { const d = await api.login(email, password); login(d.access_token, d.email); navigate("/"); }
+    try { const d = await api.login(email, password); login(d.token, d.email); navigate("/"); }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }

@@ -20,7 +20,7 @@ export default function RegisterPage() {
     try {const d = await api.register(email, password); 
 	// Register doesn't return token, need to login
 	const loginData = await api.login(email, password);
-	login(loginData.access_token, email); navigate("/"); }
+	login(loginData.token, email); navigate("/"); }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
