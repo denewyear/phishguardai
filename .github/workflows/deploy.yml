@@ -20,6 +20,19 @@ jobs:
           git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt --quiet
-          pkill -f "python main.py" || true
-          nohup venv/bin/python main.py > backend.log 2>&1 &
-          echo "Deployment complete - backend restarting"
+          
+          # Create restart script
+          cat > restart.sh << 'EOF'
+          #!/bin/bash
+          pkill -f "python main.py"
+          sleep 2
+          cd ~/phishguardai/backend
+          source venv/bin/activate
+          nohup python main.py > backend.log 2>&1 &
+          EOF
+          
+          # Make executable and run in background
+          chmod +x restart.sh
+          nohup ./restart.sh > /dev/null 2>&1 &
+          
+          echo "Deployment triggered successfully"
