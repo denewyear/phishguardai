@@ -17,22 +17,34 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/phishguardai/backend
+          
+          # Pull latest code
           git pull origin main
+          
+          # Install dependencies
           source venv/bin/activate
           pip install -r requirements.txt
-          pkill -f "venv/bin/python main.py" || true
-          sleep 3
+          
+          # Kill old process
+          pkill -9 -f "python main.py" || true
+          sleep 5
+          
+          # Start backend
           nohup venv/bin/python main.py > backend.log 2>&1 &
+          
+          # Wait for startup with extended retry
           echo "Waiting for backend to start..."
-          for i in {1..10}; do
-            if curl -sf http://localhost:8000/health > /dev/null; then
-              echo "Backend is up!"
+          for i in {1..15}; do
+            sleep 3
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✓ Backend is healthy!"
               curl http://localhost:8000/health
               exit 0
             fi
-            echo "Attempt $i/10 - waiting..."
-            sleep 2
+            echo "Attempt $i/15 - still waiting..."
           done
-          echo "Backend failed to start"
-          tail -20 backend.log
+          
+          echo "✗ Backend failed to start after 45 seconds"
+          echo "Last 30 lines of backend.log:"
+          tail -30 backend.log
           exit 1

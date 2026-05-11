@@ -146,7 +146,7 @@ export const api = {
     return res.json();
   },
   
-getHistory: async (limit = 20, offset = 0) => {
+ getHistory: async (limit = 20, offset = 0) => {
   if (USE_MOCK) {
     await delay(300);
     return mockData.history;
@@ -157,12 +157,12 @@ getHistory: async (limit = 20, offset = 0) => {
     { headers: { 'Authorization': `Bearer ${token}` }}
   );
   if (!res.ok) {
-    // Return empty array on error instead of throwing
     return [];
   }
-  return res.json();
-},
-  
+  const data = await res.json();
+  return data.items || [];
+},  
+
  getTrending: async (days = 7, limit = 10) => {
   if (USE_MOCK) {
     await delay(300);
