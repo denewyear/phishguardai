@@ -163,42 +163,44 @@ getHistory: async (limit = 20, offset = 0) => {
   return res.json();
 },
   
-  getTrending: async (days = 7, limit = 10) => {
-    if (USE_MOCK) {
-      await delay(300);
-      return mockData.trending;
-    }
-    const res = await fetch(
-      `${API_BASE}/api/trending?days=${days}&limit=${limit}`
-    );
-    return res.json();
-  },
-  
-  sharePhish: async (messageId, title, description) => {
-    if (USE_MOCK) {
-      await delay(400);
-      return { id: 99, shared_at: new Date().toISOString() };
-    }
-    const token = localStorage.getItem('token');
-    const res = await fetch(`${API_BASE}/api/share`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ message_id: messageId, title, description })
-    });
-    return res.json();
-  },
-  
-  getShared: async (limit = 20, offset = 0) => {
-    if (USE_MOCK) {
-      await delay(300);
-      return mockData.shared;
-    }
-    const res = await fetch(
-      `${API_BASE}/api/shared?limit=${limit}&offset=${offset}`
-    );
-    return res.json();
+ getTrending: async (days = 7, limit = 10) => {
+  if (USE_MOCK) {
+    await delay(300);
+    return mockData.trending;
   }
+  const res = await fetch(
+    `${API_BASE}/api/trending?days=${days}&limit=${limit}`
+  );
+  const data = await res.json();
+  return data.patterns || [];
+},
+
+sharePhish: async (messageId, title, description) => {
+  if (USE_MOCK) {
+    await delay(400);
+    return { id: 99, shared_at: new Date().toISOString() };
+  }
+  const token = localStorage.getItem('token');
+  const res = await fetch(`${API_BASE}/api/share`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ message_id: messageId, title, description })
+  });
+  return res.json();
+},
+
+getShared: async (limit = 20, offset = 0) => {
+  if (USE_MOCK) {
+    await delay(300);
+    return mockData.shared;
+  }
+  const res = await fetch(
+    `${API_BASE}/api/shared?limit=${limit}&offset=${offset}`
+  );
+  const data = await res.json();
+  return data.items || [];
+}
 };

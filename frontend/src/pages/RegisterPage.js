@@ -17,7 +17,10 @@ export default function RegisterPage() {
     e.preventDefault();
     if (password !== confirm) { setError("Passwords do not match"); return; }
     setError(""); setLoading(true);
-    try { const d = await api.register(email, password); login(d.token, d.email); navigate("/"); }
+    try {const d = await api.register(email, password); 
+	// Register doesn't return token, need to login
+	const loginData = await api.login(email, password);
+	login(loginData.access_token, email); navigate("/"); }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
