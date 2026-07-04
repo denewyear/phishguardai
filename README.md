@@ -148,7 +148,7 @@ cat > .env << EOF
 DB_HOST=phishguard-db.cxkyymwse1hm.us-east-2.rds.amazonaws.com
 DB_NAME=phishguard
 DB_USER=postgres
-DB_PASS=REMOVED_ROTATED_CREDENTIAL
+DB_PASS=your-rds-password
 DB_PORT=5432
 SECRET_KEY=your-secret-key-here
 ALLOWED_ORIGINS=http://localhost:3000
