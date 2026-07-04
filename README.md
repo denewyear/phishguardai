@@ -1,318 +1,129 @@
 # PhishGuard AI
 
-A cloud-deployed phishing detection system that analyzes suspicious messages and provides risk scoring with pattern detection.
+A cloud-deployed phishing detection system that analyzes suspicious messages, assigns a 0–100 risk score, and flags the specific patterns that make a message dangerous.
 
-## 🌐 Live Application
+Built as a two-person project with a FastAPI backend, a React frontend, and a full AWS deployment (EC2, RDS, S3). Infrastructure was decommissioned after the project period; the sections below describe the architecture as deployed.
 
-**Frontend (S3):** http://phishguard-frontend-827297749354-us-east-2-an.s3-website.us-east-2.amazonaws.com/
+<!-- Add a screenshot of the analysis UI here — 
+![PhishGuard analysis screen](docs/screenshot.png) -->
 
-**Backend (EC2):** http://3.17.25.164:8000
+## What it does
 
-**Health Check:** http://3.17.25.164:8000/health
+A user pastes a suspicious message (an email, SMS, or DM) and PhishGuard returns a risk score, a classification, and the concrete signals behind the score — suspicious URLs, urgency language, impersonation cues, and other common phishing patterns. Analyzed messages are saved to a per-user history, and users can contribute notable examples to a shared gallery. A trending view surfaces the most common phishing techniques over rolling time windows.
 
-## 🏗️ Architecture
+## Architecture
 
-**Deployment Path:** Traditional (Path A)
-- **Frontend:** React app hosted on AWS S3 Static Website Hosting
-- **Backend:** FastAPI application containerized with Docker, deployed on AWS EC2 (Amazon Linux 2023)
-- **Database:** PostgreSQL hosted on AWS RDS
-- **Storage:** AWS S3 for static assets
-
-**Data Flow:**
-User → S3 Frontend → EC2 Backend (FastAPI) → RDS PostgreSQL
-↓
-detect.py (Risk Analysis Engine)
-
-## ✨ Features
-
-### Core Features
-- **User Authentication:** JWT-based registration and login system
-- **Phishing Analysis:** Real-time message analysis with 0-100 risk scoring
-- **Pattern Detection:** Identifies 6+ phishing patterns (suspicious URLs, urgency language, impersonation, etc.)
-- **Message History:** Paginated history of all analyzed messages
-- **Rate Limiting:** API endpoint protection via slowapi
-- **Community Sharing:** Share phishing examples to public gallery
-
-### Analytics
-- **Trending Patterns:** Most common phishing techniques over 1/7/30 day windows
-- **User Statistics:** Personal analysis counts and risk breakdowns
-- **Shared Gallery:** Browse community-contributed phishing examples with filtering
-
-## 🔌 API Endpoints
-
-### Authentication
-- `POST /auth/register` - Create new user account
-```json
-  Request: {"email": "user@example.com", "password": "password123"}
-  Response: {"message": "User created", "user_id": 1}
+```
+React (S3)  ──►  FastAPI on EC2  ──►  PostgreSQL (RDS)
+                       │
+                       └─►  detect.py — risk-scoring engine
 ```
 
-- `POST /auth/login` - Get JWT access token
-```json
-  Request: {"email": "user@example.com", "password": "password123"}
-  Response: {"access_token": "eyJ...", "token_type": "bearer"}
-```
+- **Frontend** — React single-page app served from AWS S3 static hosting.
+- **Backend** — FastAPI service, containerized with Docker, running on EC2.
+- **Database** — PostgreSQL on AWS RDS, accessed via parameterized queries.
+- **Risk engine** — `detect.py`, a rule-based analyzer that scores messages and returns the patterns it matched.
 
-### Analysis (Requires Authentication)
-- `POST /api/analyze` - Analyze a message
-```json
-  Request: {"message": "URGENT! Click here to verify your account"}
-  Response: {
-    "risk_score": 75,
-    "classification": "HIGH RISK",
-    "patterns_detected": ["Suspicious URL", "Urgency language"],
-    "recommendation": "Do not click links"
-  }
-```
+## Key features
 
-- `GET /api/history?limit=20&offset=0` - Get user's analysis history
-- `GET /api/stats` - Get user statistics (total analyzed, risk breakdown)
-- `DELETE /api/history/{id}` - Delete a message from history
+- **Risk scoring** — every message gets a 0–100 score and a HIGH / MEDIUM / LOW classification, with the matched patterns returned alongside so the result is explainable rather than a black box.
+- **Pattern detection** — identifies 6+ phishing signals (suspicious URLs, urgency language, impersonation, and more).
+- **Authentication** — JWT-based registration and login, with bcrypt-hashed passwords.
+- **History & analytics** — paginated per-user history and personal risk breakdowns.
+- **Community gallery** — users can share notable phishing examples; a trending view aggregates the most common patterns over 1/7/30-day windows.
+- **Rate limiting** — per-endpoint throttling to protect the API.
 
-### Community
-- `GET /api/trending?days=7&limit=10` - Most common phishing patterns
-```json
-  Response: {
-    "patterns": [
-      {"pattern": "Suspicious URL", "count": 45, "percentage": 32.1},
-      {"pattern": "Urgency language", "count": 38, "percentage": 27.1}
-    ],
-    "days": 7
-  }
-```
+## Security
 
-- `POST /api/share` - Share a phishing example to gallery (requires auth)
-```json
-  Request: {"message_id": 123, "title": "Classic Bank Scam", "description": "..."}
-```
+Security was a first-class concern given the subject matter:
 
-- `GET /api/shared?limit=20&offset=0` - Browse shared examples
-```json
-  Response: {
-    "items": [
-      {
-        "id": 1,
-        "title": "...",
-        "message_text": "...",
-        "risk_score": 95,
-        "patterns": ["..."],
-        "shared_at": "2026-05-10T..."
-      }
-    ]
-  }
-```
+- JWT authentication with bcrypt password hashing
+- Parameterized queries throughout (SQL-injection prevention)
+- Pydantic input validation on every endpoint
+- CORS restricted to an allowlist
+- Per-endpoint rate limiting via slowapi
+- Secrets kept in environment variables, never committed to source
 
-## 💻 Tech Stack
+## Tech stack
 
-### Backend
-- **Framework:** FastAPI (Python 3.9)
-- **Database:** PostgreSQL (psycopg2)
-- **Authentication:** JWT tokens (python-jose, passlib, bcrypt)
-- **Rate Limiting:** slowapi
-- **CORS:** FastAPI middleware
-- **Deployment:** Docker container on EC2
+**Backend** — FastAPI (Python), PostgreSQL (psycopg2), JWT auth (python-jose, passlib, bcrypt), slowapi, Docker
+**Frontend** — React 18, React Router v6
+**Infrastructure** — AWS EC2, RDS (PostgreSQL), S3
 
-### Frontend
-- **Framework:** React 18
-- **Routing:** React Router v6
-- **API Client:** Fetch API
-- **Styling:** Inline styles with design system
-- **Deployment:** S3 Static Website Hosting
+## Running locally
 
-### Infrastructure
-- **Compute:** AWS EC2 t2.micro (Amazon Linux 2023)
-- **Database:** AWS RDS PostgreSQL (db.t3.micro)
-- **Storage:** AWS S3
-- **Networking:** VPC, Security Groups, Elastic IP
+**Prerequisites:** Python 3.9+, Node.js 16+, and a PostgreSQL instance (local or remote).
 
-## 🚀 Local Development
+**Backend**
 
-### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- PostgreSQL (or use RDS connection)
-
-### Backend Setup
 ```bash
 cd backend
-
-# Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate            # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create .env file
-cat > .env << EOF
-DB_HOST=phishguard-db.cxkyymwse1hm.us-east-2.rds.amazonaws.com
-DB_NAME=phishguard
-DB_USER=postgres
-DB_PASS=your-rds-password
-DB_PORT=5432
-SECRET_KEY=your-secret-key-here
-ALLOWED_ORIGINS=http://localhost:3000
-EOF
-
-# Run server
-python main.py
-# Backend runs on http://localhost:8000
+cp .env.example .env                # then fill in your own values
+python main.py                      # runs on http://localhost:8000
 ```
 
-### Frontend Setup
+The `.env` file holds your database connection, JWT secret, and allowed origins. See `.env.example` for the required keys — never commit a real `.env`.
+
+**Frontend**
+
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Update API endpoint in src/api/mockApi.js
-# Set USE_MOCK = false
-# Set API_BASE = 'http://localhost:8000'
-
-# Run development server
-npm start
-# Frontend runs on http://localhost:3000
+npm start                           # runs on http://localhost:3000
 ```
 
-## 🧪 Testing
+Point the frontend at your backend by setting the API base URL in `src/api/` (`USE_MOCK = false`).
 
-### Using the Live Application
-1. Go to: http://phishguard-frontend-827297749354-us-east-2-an.s3-website.us-east-2.amazonaws.com/
-2. Click **Sign up** and create an account
-3. Paste a suspicious message and click **Analyze**
-4. Check **My History**, **Trending**, and **Gallery** pages
+## API overview
 
-### Using Postman
-Import and test API endpoints:
-1. Health check: `GET http://3.17.25.164:8000/health`
-2. Register: `POST http://3.17.25.164:8000/auth/register`
-3. Login: `POST http://3.17.25.164:8000/auth/login`
-4. Analyze: `POST http://3.17.25.164:8000/api/analyze` (with Bearer token)
+The backend exposes auth, analysis, and community endpoints. A representative call:
 
-### Example Test Messages
-HIGH RISK:
-URGENT! Your account will be suspended. Click here NOW: http://verify-account.com
-MEDIUM RISK:
-Your package delivery failed. Update address: amzn-delivery.com/update
-LOW RISK:
-Hey! Are we still meeting for coffee at 3pm?
+```
+POST /api/analyze          (requires a Bearer token)
+Request:   { "message": "URGENT! Click here to verify your account" }
+Response:  {
+  "risk_score": 75,
+  "classification": "HIGH RISK",
+  "patterns_detected": ["Suspicious URL", "Urgency language"],
+  "recommendation": "Do not click links"
+}
+```
 
-## 📊 Database Schema
+Other endpoints cover registration and login (`/auth/*`), message history and stats (`/api/history`, `/api/stats`), and the shared gallery and trending patterns (`/api/shared`, `/api/trending`). Full request/response shapes live in the route handlers under `backend/routers/`.
 
-### users
-- `id` (SERIAL PRIMARY KEY)
-- `email` (VARCHAR UNIQUE)
-- `hashed_password` (VARCHAR)
-- `created_at` (TIMESTAMP)
+## Project structure
 
-### messages
-- `id` (SERIAL PRIMARY KEY)
-- `user_id` (INTEGER FK)
-- `message_text` (TEXT)
-- `risk_score` (INTEGER)
-- `classification` (VARCHAR)
-- `patterns` (TEXT[])
-- `recommendation` (TEXT)
-- `analyzed_at` (TIMESTAMP)
-
-### shared_phishes
-- `id` (SERIAL PRIMARY KEY)
-- `message_id` (INTEGER FK)
-- `shared_by_user_id` (INTEGER FK)
-- `title` (VARCHAR)
-- `description` (TEXT)
-- `is_public` (BOOLEAN)
-- `shared_at` (TIMESTAMP)
-
-## 👥 Team
-
-**Partner 1 (Backend/Infrastructure):**
-- Backend API development (FastAPI)
-- Database design and RDS setup
-- EC2 deployment and configuration
-- Docker containerization
-- API endpoint implementation
-
-**Partner 2 (Frontend/Presentation):**
-- React frontend development
-- UI/UX design
-- Component architecture
-- S3 deployment
-- Presentation materials
-
-## 📝 Project Structure
+```
 phishguardai/
 ├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── database.py          # Database functions
-│   ├── auth.py              # Authentication utilities
-│   ├── detect.py            # Risk analysis engine
-│   ├── routers/
-│   │   ├── auth_router.py   # Auth endpoints
-│   │   └── analyze_router.py # Analysis endpoints
-│   ├── requirements.txt
+│   ├── main.py              # FastAPI application entry point
+│   ├── detect.py            # risk-scoring engine
+│   ├── database.py          # database access layer
+│   ├── auth.py              # JWT / password utilities
+│   ├── routers/             # auth and analysis endpoints
 │   ├── Dockerfile
-│   └── .env
-├── frontend/
-│   ├── src/
-│   │   ├── pages/           # React pages
-│   │   ├── components/      # Reusable components
-│   │   ├── api/             # API client
-│   │   ├── styles.js        # Design system
-│   │   └── App.js           # Main app component
-│   ├── public/
-│   │   └── _redirects       # Netlify/S3 routing
-│   └── package.json
-└── README.md
-
-## 🔐 Security Features
-
-- JWT-based authentication with secure password hashing (bcrypt)
-- Rate limiting on all API endpoints
-- CORS protection with whitelist
-- SQL injection prevention via parameterized queries
-- Input validation with Pydantic models
-
-## 📦 Deployment
-
-### Backend (EC2)
-```bash
-# SSH into EC2
-ssh -i your-key.pem ec2-user@3.17.25.164
-
-# Clone repository
-git clone https://github.com/denewyear/phishguardai.git
-cd phishguardai/backend
-
-# Setup and run
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-nohup venv/bin/python main.py > backend.log 2>&1 &
+│   └── requirements.txt
+└── frontend/
+    ├── src/                 # pages, components, API client
+    └── package.json
 ```
 
-### Frontend (S3)
-```bash
-# Build production bundle
-cd frontend
-npm run build
+## Team & my role
 
-# Upload to S3 bucket
-# Use AWS Console or AWS CLI to upload build/ contents
-```
+A two-person project. I owned the **backend and infrastructure**:
 
-## 🎯 Future Enhancements
+- FastAPI service design and all API endpoints
+- The `detect.py` risk-scoring and pattern-detection engine
+- JWT authentication and password hashing
+- PostgreSQL schema and data-access layer
+- Docker containerization and AWS deployment (EC2, RDS, S3)
 
-- Machine learning model for improved detection
-- Email forwarding integration
-- Browser extension
-- Mobile app
-- Multi-language support
-- Advanced reporting and analytics
+My teammate built the React frontend, UI/UX, and component architecture.
 
----
+## Possible extensions
 
-**Live Demo:** http://phishguard-frontend-827297749354-us-east-2-an.s3-website.us-east-2.amazonaws.com/
-
-**GitHub:** https://github.com/denewyear/phishguardai
+Directions the project could grow: a machine-learning detection model to complement the rule-based engine, a browser extension for in-context scanning, and email-forwarding integration.
